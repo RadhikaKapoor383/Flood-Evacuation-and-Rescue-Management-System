@@ -345,7 +345,7 @@ def display_grid(save_image=True):
     if save_image:
 
         plt.savefig(
-            "./images/flood_environment.png",
+            "../images/flood_environment.png",
             bbox_inches="tight"
         )
 
@@ -384,4 +384,5 @@ print(is_passable(3,3))
 # SHOW ENVIRONMENT
 # =====================================================
 
-display_grid()
+if __name__ == "__main__":
+    display_grid()
