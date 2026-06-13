@@ -148,9 +148,6 @@ def is_passable(row, col):
     if cell_type[row][col] == BLOCKED:
         return False
 
-    if water_level[row][col] > FLOOD_THRESHOLD:
-        return False
-
     return True
 
 # =====================================================
