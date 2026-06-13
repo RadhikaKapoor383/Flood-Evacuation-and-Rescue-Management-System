@@ -207,12 +207,46 @@ def get_cost(row, col):
     return 1 + depth * 10
 
 # =====================================================
+# RISK PENALTY FUNCTION
+# =====================================================
+
+def get_risk_cost(row, col):
+
+    base_cost = get_cost(row, col)
+
+    flooded_neighbors = 0
+
+    directions = [
+        (-1,0),
+        (1,0),
+        (0,-1),
+        (0,1)
+    ]
+
+    for dr, dc in directions:
+
+        nr = row + dr
+        nc = col + dc
+
+        if 0 <= nr < ROWS and 0 <= nc < COLS:
+
+            if water_level[nr][nc] > FLOOD_THRESHOLD:
+                flooded_neighbors += 1
+
+    risk_penalty = flooded_neighbors * 3
+
+    return base_cost + risk_penalty
+
+# =====================================================
 # HEURISTIC (MANHATTAN DISTANCE)
 # =====================================================
 
 def heuristic(a, b):
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
+def heuristic_multi(pos, goals):
+
+    return min(heuristic(pos, g) for g in goals)
 
 # =====================================================
 # REFRESH FLOOD CELLS
