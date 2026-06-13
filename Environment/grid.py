@@ -84,7 +84,11 @@ for r, c in blocked:
 # VICTIM
 # =====================================================
 
-victims = [(1,1),(4,2),(2,9),(6,2)]
+victims = [
+    (18,6),
+    (17,8),
+    (15,10)
+]
 
 for r, c in victims:
     cell_type[r][c] = VICTIM
@@ -126,13 +130,11 @@ for r, c in flood_origins:
 # ADD SOME RISKY CELLS
 # =====================================================
 
-water_level[8][8] = 0.5
-water_level[8][9] = 0.4
-water_level[10][10] = 0.6
-water_level[11][9] = 0.45
-water_level[12][9] = 0.5
-water_level[13][9] = 0.45
-water_level[14][9] = 0.4
+for r in range(4, 19):
+    water_level[r][5] = 0.65
+
+for r in range(8, 18):
+    water_level[r][9] = 0.55
 
 # =====================================================
 # CHECK PASSABILITY
