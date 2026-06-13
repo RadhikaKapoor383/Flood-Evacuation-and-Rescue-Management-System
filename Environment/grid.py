@@ -338,9 +338,6 @@ def display_grid(save_image=True):
         "Flood Evacuation & Rescue Environment"
     )
 
-    # ==========================================
-    # SAVE IMAGE FOR GITHUB
-    # ==========================================
 
     if save_image:
 
