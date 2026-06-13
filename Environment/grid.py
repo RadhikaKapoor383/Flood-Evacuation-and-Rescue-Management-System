@@ -295,6 +295,26 @@ def spread_flood():
     refresh_flood_cells()
 
 # =====================================================
+# SNAPSHOT ORIGINAL GRID STATE (run this ONCE, right after importing grid)
+# =====================================================
+
+import copy
+
+original_cell_type = copy.deepcopy(cell_type)
+original_water_level = copy.deepcopy(water_level)
+
+# =====================================================
+# RESET FUNCTION (call before each algorithm run)
+# =====================================================
+
+def reset_grid():
+
+    for r in range(ROWS):
+        for c in range(COLS):
+            cell_type[r][c] = original_cell_type[r][c]
+            water_level[r][c] = original_water_level[r][c]
+            
+# =====================================================
 # DISPLAY GRID
 # =====================================================
 
