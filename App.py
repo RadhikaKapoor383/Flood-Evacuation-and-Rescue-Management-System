@@ -2,21 +2,22 @@
 # FLOOD EVACUATION & RESCUE SYSTEM — STREAMLIT
 # Exact port of gui.py visual & logic
 # =====================================================
- 
+
 import streamlit as st
 import time
 import heapq
 import pickle
 import random
 import os
+import pandas as pd
 from collections import deque
- 
+
 st.set_page_config(
     page_title="Flood Evacuation & Rescue — AI Simulator",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
- 
+
 # ── Custom CSS (mirror gui.py colour scheme) ──────
 st.markdown("""
 <style>
@@ -31,37 +32,37 @@ st.markdown("""
   --risky:#85C1E9;
 }
 body, .stApp { background:var(--bg) !important; color:var(--text); font-family:Helvetica,Arial,sans-serif; }
- 
+
 /* top bar */
 .topbar{background:var(--accent);color:#fff;padding:10px 16px;
         border-radius:6px;font-size:1.05rem;font-weight:bold;
         display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
 .topbar .status{font-size:0.9rem;}
- 
+
 /* panel cards */
 .panel{background:var(--panel);border:1px solid var(--border);
        border-radius:8px;padding:12px 14px;height:100%;}
 .section-title{font-size:0.7rem;font-weight:bold;color:var(--muted);
                letter-spacing:.08em;text-transform:uppercase;
                border-bottom:1px solid var(--border);padding-bottom:4px;margin:10px 0 6px; margin-top:14px !important;}
- 
+
 /* algo buttons */
 .algo-btn{display:block;width:100%;text-align:left;padding:7px 12px;
           margin:3px 0;border:1px solid var(--border);border-radius:5px;
           background:var(--panel);color:var(--text);font-size:0.95rem;cursor:pointer;}
 .algo-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
- 
+
 /* stat rows */
 .stat-row{margin:5px 0;}
 .stat-label{font-size:0.78rem;color:var(--muted);}
 .stat-value{font-size:0.95rem;font-weight:bold;color:var(--text);}
- 
+
 /* ML badges */
-.ml-zone   {background:#EEF4FF;color:var(--accent);  border-radius:4px;padding:5px 10px;margin:3px 0;font-weight:bold;}
-.ml-risk   {background:#FFF8EE;color:var(--warn);    border-radius:4px;padding:5px 10px;margin:3px 0;font-weight:bold;}
-.ml-rescue {background:#FFEEEE;color:var(--danger);  border-radius:4px;padding:5px 10px;margin:3px 0;font-weight:bold;}
-.ml-priority{background:#EEFFEE;color:var(--success);border-radius:4px;padding:5px 10px;margin:3px 0;font-weight:bold;}
- 
+.ml-zone   {background:#EEF4FF;color:var(--accent);  border-radius:4px;padding:5px 10px;margin:5px 0 !important;font-weight:bold;display:block;}
+.ml-risk   {background:#FFF8EE;color:var(--warn);    border-radius:4px;padding:5px 10px;margin:5px 0 !important;font-weight:bold;display:block;}
+.ml-rescue {background:#FFEEEE;color:var(--danger);  border-radius:4px;padding:5px 10px;margin:5px 0 !important;font-weight:bold;display:block;}
+.ml-priority{background:#EEFFEE;color:var(--success);border-radius:4px;padding:5px 10px;margin:5px 0 !important;font-weight:bold;display:block;}
+
 /* log box */
 .log-box{background:#F8F7F4;border:1px solid var(--border);border-radius:5px;
          font-family:Courier,monospace;font-size:0.78rem;padding:8px;
@@ -70,19 +71,19 @@ body, .stApp { background:var(--bg) !important; color:var(--text); font-family:H
 .log-success{color:var(--success);}
 .log-warn   {color:var(--warn);}
 .log-error  {color:var(--danger);}
- 
+
 /* legend dots */
 .legend-row{display:flex;align-items:center;gap:6px;margin:2px 0;font-size:0.8rem;color:var(--muted);}
 .dot{width:14px;height:14px;border-radius:2px;border:1px solid var(--border);display:inline-block;flex-shrink:0;}
- 
+
 /* grid canvas area */
 .grid-wrap{border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--bg);display:inline-block;}
 svg text{font-family:Helvetica,Arial,sans-serif;}
- 
+
 /* hide default streamlit padding */
 .block-container{padding-top:0.5rem !important;}
 div[data-testid="stVerticalBlock"]{gap:0.3rem;}
- 
+
 /* radio button text visibility fix */
 div[data-testid="stRadio"] label,
 div[data-testid="stRadio"] label p,
@@ -124,19 +125,24 @@ div[data-testid="stExpander"] summary svg{
 div[data-testid="stExpander"] details{
   border:none !important;
 }
+div[data-testid="stExpander"] details[open] summary{
+  background:var(--panel) !important;
+  color:var(--text) !important;
+  border-color:var(--accent) !important;
+}
 div[data-testid="stExpander"]{
   margin-top:2px !important;
 }
 </style>
 """, unsafe_allow_html=True)
- 
+
 # =====================================================
 # GRID CONSTANTS  (exact values from gui.py)
 # =====================================================
 ROWS = 20; COLS = 20
 ROAD=0; BUILDING=1; FLOOD=2; BLOCKED=3; VICTIM=4; SHELTER_TYPE=5
 RISKY_THRESHOLD = 0.3; FLOOD_THRESHOLD = 0.7
- 
+
 _BUILDINGS  = [(3,3),(3,4),(3,5),(7,12),(7,13),(7,14),(8,12),(8,13),
                (12,5),(12,6),(13,5),(13,6),(15,15),(15,16),(16,15),(16,16),(16,17),(17,15),(17,16)]
 _BLOCKED    = [(5,8),(5,9),(6,9),(10,15),(11,15),(12,15),(13,15)]
@@ -144,7 +150,7 @@ _DEFAULT_VICTIMS = [(18,6),(17,8),(15,10)]
 _SHELTER    = (18,18)
 _FLOOD_ORIGINS = [(9,9),(9,10),(10,9),(10,10),(11,9),(11,10),(12,9),(12,10),
                   (15,8),(15,9),(16,8),(16,9),(17,8),(17,9)]
- 
+
 CELL_COLORS = {ROAD:"#F0EEEA", BUILDING:"#3D3D3D", FLOOD:"#1F77B4",
                BLOCKED:"#FF7F0E", VICTIM:"#D62728", SHELTER_TYPE:"#2CA02C"}
 COLOR_RISKY  = "#85C1E9"
@@ -152,7 +158,7 @@ COLOR_PATH   = "#FFD700"
 COLOR_AGENT  = "#00C864"
 COLOR_RESCUED= "#A8E6CF"
 COLOR_LINE   = "#CCCAC4"
- 
+
 # =====================================================
 # GRID FACTORY
 # =====================================================
@@ -168,7 +174,7 @@ def _make_grid():
     for r in range(4,19): wl[r][5]  = 0.65
     for r in range(8,18): wl[r][9]  = 0.55
     return ct, wl
- 
+
 # =====================================================
 # SESSION STATE INIT
 # =====================================================
@@ -203,19 +209,19 @@ def _init_ss():
     for k,v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
- 
+
 _init_ss()
 S = st.session_state   # shorthand
- 
+
 # =====================================================
 # HELPERS: grid access
 # =====================================================
 def ct(): return S.ct
 def wl(): return S.wl
- 
+
 def is_passable(r,c):
     return ct()[r][c] not in (BUILDING, BLOCKED)
- 
+
 def neighbors(pos):
     r,c = pos
     out=[]
@@ -224,7 +230,7 @@ def neighbors(pos):
         if 0<=nr<ROWS and 0<=nc<COLS and is_passable(nr,nc):
             out.append((nr,nc))
     return out
- 
+
 def cost(r,c):      return 1 + wl()[r][c]*10
 def risk_cost(r,c):
     base = cost(r,c)
@@ -233,7 +239,7 @@ def risk_cost(r,c):
     return base + fl*3
 def heuristic(a,b): return abs(a[0]-b[0])+abs(a[1]-b[1])
 def hm(pos,goals):  return min(heuristic(pos,g) for g in goals) if goals else 0
- 
+
 # =====================================================
 # ALGORITHMS (exact from gui.py)
 # =====================================================
@@ -249,7 +255,7 @@ def algo_bfs(start, goals):
             if nb not in visited:
                 visited.add(nb); parent[nb]=cur; q.append(nb)
     return None, None
- 
+
 def algo_astar(start, goals):
     goal_set=set(goals); open_list=[(0,start)]
     g={start:0}; parent={start:None}; vis=set()
@@ -267,7 +273,7 @@ def algo_astar(start, goals):
                 g[nb]=tg; parent[nb]=cur
                 heapq.heappush(open_list,(tg+hm(nb,list(goal_set)),nb))
     return None, None
- 
+
 def algo_risk_astar(start, goals):
     goal_set=set(goals); open_list=[(0,start)]
     g={start:0}; parent={start:None}; vis=set()
@@ -285,7 +291,7 @@ def algo_risk_astar(start, goals):
                 g[nb]=tg; parent[nb]=cur
                 heapq.heappush(open_list,(tg+hm(nb,list(goal_set)),nb))
     return None, None
- 
+
 def algo_hill_climb(start, goals, max_steps=2000):
     goal_set=set(goals); cur=start; path=[cur]; visited={cur}
     for _ in range(max_steps):
@@ -302,9 +308,9 @@ def algo_hill_climb(start, goals, max_steps=2000):
             else: break
         visited.add(best); cur=best; path.append(cur)
     return path, (cur if cur in goal_set else None)
- 
+
 ALGORITHMS={"BFS":algo_bfs,"A*":algo_astar,"Risk-Based A*":algo_risk_astar,"Hill Climb":algo_hill_climb}
- 
+
 # =====================================================
 # FLOOD SPREAD
 # =====================================================
@@ -319,7 +325,7 @@ def spread_flood():
             if wl()[r][c]>FLOOD_THRESHOLD:
                 if ct()[r][c] not in (BUILDING, VICTIM, SHELTER_TYPE):
                     ct()[r][c]=FLOOD
- 
+
 # =====================================================
 # ML PREDICTION (optional models)
 # =====================================================
@@ -332,11 +338,10 @@ try:
     with open(os.path.join(_mp,'features.pkl'),'rb') as f:      _features=pickle.load(f)
     _ML_READY=True
 except Exception: pass
- 
+
 def ml_predict(r,c):
     if not _ML_READY: return "—","—","—","—"
     try:
-        import pandas as pd
         wlv=wl()[r][c]
         fn=sum(1 for dr,dc in ((-1,0),(1,0),(0,-1),(0,1))
                if 0<=r+dr<ROWS and 0<=c+dc<COLS and wl()[r+dr][c+dc]>FLOOD_THRESHOLD)
@@ -366,7 +371,7 @@ def ml_predict(r,c):
         return zone, flood_risk, rescue_needed, priority
     except Exception:
         return "—","—","—","—"
- 
+
 # =====================================================
 # LOGGING
 # =====================================================
@@ -374,7 +379,7 @@ def _log(msg, tag="info"):
     ts = time.strftime('%H:%M:%S')
     S.logs.append((ts, msg, tag))
     if len(S.logs)>200: S.logs=S.logs[-200:]
- 
+
 # =====================================================
 # RESET
 # =====================================================
@@ -389,61 +394,61 @@ def do_reset():
     S.ml_zone="—"; S.ml_risk="—"; S.ml_rescue="—"; S.ml_priority="—"
     S.cell_info="Hover a cell"; S.selected_cell=None; S.logs=[]
     _log(f"Grid reset. {len(S.victims)} victim(s) restored.")
- 
+
 # =====================================================
 # SVG GRID  (replaces Tkinter canvas)
 # =====================================================
 PX = 24   # cell pixel size (fits 20x20 nicely)
- 
+
 def build_svg():
     W = COLS*PX; H = ROWS*PX
     parts = [f'<svg width="{W}" height="{H}" xmlns="http://www.w3.org/2000/svg">']
- 
+
     for r in range(ROWS):
         for c in range(COLS):
             x0,y0=c*PX,r*PX
             cell=ct()[r][c]; w=wl()[r][c]
- 
+
             # base fill
             if (r,c) in S.path_cells:
                 fill=COLOR_PATH
             else:
                 fill=CELL_COLORS.get(cell,"#F0EEEA")
- 
+
             parts.append(f'<rect x="{x0}" y="{y0}" width="{PX}" height="{PX}" '
                          f'fill="{fill}" stroke="{COLOR_LINE}" stroke-width="0.4"/>')
- 
+
             # risky water overlay
             if RISKY_THRESHOLD < w <= FLOOD_THRESHOLD:
                 parts.append(f'<rect x="{x0}" y="{y0}" width="{PX}" height="{PX}" '
                              f'fill="{COLOR_RISKY}" fill-opacity="0.55" stroke="none"/>')
- 
+
     # rescued victims
     for (r,c) in S.rescued:
         cx,cy=c*PX+PX//2, r*PX+PX//2; rad=PX//2-2
         parts.append(f'<circle cx="{cx}" cy="{cy}" r="{rad}" fill="{COLOR_RESCUED}" stroke="#3B6D11" stroke-width="1.5"/>')
         parts.append(f'<text x="{cx}" y="{cy+4}" text-anchor="middle" fill="#3B6D11" font-size="9" font-weight="bold">✓</text>')
- 
+
     # active victims
     for (r,c) in S.victims:
         if (r,c) not in S.rescued:
             cx,cy=c*PX+PX//2, r*PX+PX//2; rad=PX//2-1
             parts.append(f'<circle cx="{cx}" cy="{cy}" r="{rad}" fill="{CELL_COLORS[VICTIM]}" stroke="white" stroke-width="1.5"/>')
             parts.append(f'<text x="{cx}" y="{cy+4}" text-anchor="middle" fill="white" font-size="8" font-weight="bold">V</text>')
- 
+
     # agent
     if S.agent_pos:
         r,c=S.agent_pos; cx,cy=c*PX+PX//2, r*PX+PX//2; rad=PX//2-2
         parts.append(f'<circle cx="{cx}" cy="{cy}" r="{rad}" fill="{COLOR_AGENT}" stroke="white" stroke-width="1.5"/>')
         parts.append(f'<circle cx="{cx}" cy="{cy}" r="3" fill="white"/>')
- 
+
     # shelter label
     sr,sc=S.shelter; scx,scy=sc*PX+PX//2, sr*PX+PX//2
     parts.append(f'<text x="{scx}" y="{scy+3}" text-anchor="middle" fill="white" font-size="7" font-weight="bold">S</text>')
- 
+
     parts.append('</svg>')
     return "".join(parts)
- 
+
 # =====================================================
 # SIMULATION (runs step by step, redraws each step)
 # =====================================================
@@ -451,7 +456,7 @@ def run_simulation():
     if not S.victims:
         _log("No victims on grid — place one first.", "warn")
         S.run_requested=False; return
- 
+
     # reset positions
     S.path_cells=set(); S.rescued=set()
     S.agent_pos=(0,0); S.total_steps=0; S.total_cost=0.0
@@ -460,16 +465,16 @@ def run_simulation():
     for r2,c2 in S.victims:
         if ct()[r2][c2] not in (BUILDING,BLOCKED,FLOOD,SHELTER_TYPE):
             ct()[r2][c2]=VICTIM
- 
+
     S.sim_status="Running"; S.running=True; S.stop_flag=False
     algo_fn=ALGORITHMS[S.algo]
     delay=S.speed_ms/1000.0
     rem=list(S.victims)
     cur_pos=(0,0)
     _log(f"Starting {S.algo} | {len(rem)} victim(s)","info")
- 
+
     grid_slot = st.empty()   # placeholder updated each frame
- 
+
     def redraw(status_txt, status_color):
         svg=build_svg()
         status_dot="🟢" if "Running" in status_txt else ("🔴" if "Stopped" in status_txt or "Stuck" in status_txt else "🏁")
@@ -479,7 +484,7 @@ def run_simulation():
             f'{status_dot} {status_txt} &nbsp;|&nbsp; Steps: {S.total_steps} &nbsp;|&nbsp; Cost: {S.total_cost:.1f}'
             f'</div>',
             unsafe_allow_html=True)
- 
+
     while rem:
         if S.stop_flag: S.sim_status="Stopped"; break
         path, found = algo_fn(cur_pos, rem)
@@ -503,7 +508,7 @@ def run_simulation():
         if ct()[found[0]][found[1]]==VICTIM: ct()[found[0]][found[1]]=ROAD
         cur_pos=found
         _log(f"✓ Rescued {found}! ({len(S.rescued)}/{len(S.victims)})","success")
- 
+
     if S.sim_status=="Running" and not S.stop_flag:
         _log("All victims rescued! Heading to shelter…","info")
         path_s,_=algo_fn(cur_pos,[S.shelter])
@@ -519,10 +524,10 @@ def run_simulation():
         if not S.stop_flag:
             _log(f"🏁 Complete! {S.total_steps} steps | cost {S.total_cost:.1f}","success")
             S.sim_status="Complete"
- 
+
     S.running=False; S.run_requested=False
     redraw(S.sim_status, "#3B6D11" if S.sim_status=="Complete" else "#A32D2D")
- 
+
 # =====================================================
 # TOP BAR
 # =====================================================
@@ -533,12 +538,12 @@ st.markdown(f'''
   <span>⚡ Flood Evacuation &amp; Rescue — AI Simulator</span>
   <span class="status" style="color:{sc}">● {S.sim_status}</span>
 </div>''', unsafe_allow_html=True)
- 
+
 # =====================================================
 # 3-COLUMN LAYOUT
 # =====================================================
 left_col, center_col, right_col = st.columns([1.35, 2.4, 1.25])
- 
+
 # ─── LEFT PANEL ─────────────────────────────────────
 with left_col:
     left_panel = st.container(key="left_panel")
@@ -546,7 +551,7 @@ with left_col:
         '<style>.st-key-left_panel{background:var(--panel);border:1px solid var(--border);'
         'border-radius:8px;padding:12px 14px;}</style>',
         unsafe_allow_html=True)
- 
+
 with left_panel:
     # Algorithm
     st.markdown('<div class="section-title">Algorithm</div>', unsafe_allow_html=True)
@@ -560,7 +565,7 @@ with left_panel:
                 unsafe_allow_html=True)
         if st.button(label, key=f"algo_{name}", width='stretch'):
             S.algo=name; st.rerun()
- 
+
     # Edit Grid
     st.markdown('<div class="section-title">Edit Grid</div>', unsafe_allow_html=True)
     st.caption("Left-click row,col to act on a cell:")
@@ -572,7 +577,7 @@ with left_panel:
         st.markdown(f'<div style="font-size:0.8rem;color:#185FA5">Selected: {sel}</div>', unsafe_allow_html=True)
     else:
         st.markdown('<div style="font-size:0.8rem;color:#888780">No cell selected</div>', unsafe_allow_html=True)
- 
+
     # Cell coord input
     with st.expander("Click a cell (enter row,col)", expanded=False):
         inp_r = st.number_input("Row",0,ROWS-1,0,key="inp_r")
@@ -605,15 +610,15 @@ with left_panel:
                 S.ml_zone=zone; S.ml_risk=risk; S.ml_rescue=resc; S.ml_priority=pri
                 _log(f"Predicted ({r2},{c2}): zone={zone} risk={risk}","info")
             st.rerun()
- 
+
     # Controls
     st.markdown('<div class="section-title">Controls</div>', unsafe_allow_html=True)
     S.speed_ms = st.slider("Speed (ms/step)", 20, 600, S.speed_ms, step=10, key="spd")
     S.flood_spread = st.checkbox("Dynamic flood spread", value=S.flood_spread, key="fs")
- 
+
     # Actions
     st.markdown('<div class="section-title">Actions</div>', unsafe_allow_html=True)
- 
+
     run_label = "■ Stop" if S.running else "▶ Run Rescue"
     run_color = "#B91C1C" if S.running else "#1A7F37"
     st.markdown(
@@ -627,10 +632,10 @@ with left_panel:
         else:
             S.run_requested=True
         st.rerun()
- 
+
     if st.button("↺  Reset Grid", width='stretch', key="reset_btn"):
         do_reset(); st.rerun()
- 
+
     c1,c2=st.columns(2)
     with c1:
         if st.button("🗑 Clear Victims", width='stretch', key="clr_v"):
@@ -641,7 +646,7 @@ with left_panel:
     with c2:
         if st.button("〰 Spread Flood", width='stretch', key="spr_f"):
             spread_flood(); _log("Flood spread manually.","warn"); st.rerun()
- 
+
     # Legend
     st.markdown('<div class="section-title">Legend</div>', unsafe_allow_html=True)
     legend=[
@@ -654,16 +659,16 @@ with left_panel:
     for color,label in legend:
         html+=f'<div class="legend-row"><span class="dot" style="background:{color}"></span>{label}</div>'
     st.markdown(html, unsafe_allow_html=True)
- 
- 
+
+
 # ─── CENTER PANEL ───────────────────────────────────
 with center_col:
     st.markdown('<div class="section-title" style="font-size:0.9rem;margin-bottom:6px;">Simulation Grid  '
                 f'<span style="font-size:0.75rem;color:#888780">20×20 · algorithm: {S.algo}</span></div>',
                 unsafe_allow_html=True)
- 
+
     grid_placeholder = st.empty()
- 
+
     if S.run_requested:
         # run the full simulation (blocking, redraws inside)
         run_simulation()
@@ -676,7 +681,7 @@ with center_col:
             f'Steps: {S.total_steps} &nbsp;|&nbsp; Cost: {S.total_cost:.1f} &nbsp;|&nbsp; '
             f'Rescued: {len(S.rescued)}/{len(S.victims)}</div>',
             unsafe_allow_html=True)
- 
+
     # Log box
     st.markdown('<div class="section-title" style="margin-top:10px;">Log</div>', unsafe_allow_html=True)
     tag_css={"info":"log-info","success":"log-success","warn":"log-warn","error":"log-error"}
@@ -687,7 +692,23 @@ with center_col:
     st.markdown(f'<div class="log-box" id="logbox">{log_lines}</div>'
                 '<script>var lb=document.getElementById("logbox");if(lb)lb.scrollTop=lb.scrollHeight;</script>',
                 unsafe_allow_html=True)
- 
+
+    # ─── Victim Table — moved here, right below Log ──
+    st.markdown('<div class="section-title" style="margin-top:10px;">Victim Table</div>', unsafe_allow_html=True)
+
+    victim_rows=[]
+    for r2,c2 in S.victims:
+        status="✓ Rescued" if (r2,c2) in S.rescued else "⚠ Active"
+        wlv=wl()[r2][c2]
+        zone,risk,resc,pri=ml_predict(r2,c2) if _ML_READY else ("—","—","—","—")
+        victim_rows.append({"Row":r2,"Col":c2,"Status":status,"Water Level":f"{wlv:.2f}",
+                            "Zone":zone,"Flood Risk":risk,"Rescue Needed":resc,"Priority":pri})
+
+    if victim_rows:
+        st.dataframe(pd.DataFrame(victim_rows), width='stretch', hide_index=True)
+    else:
+        st.caption("No victims on grid.")
+
 # ─── RIGHT PANEL ────────────────────────────────────
 with right_col:
     right_panel = st.container(key="right_panel")
@@ -695,10 +716,10 @@ with right_col:
         '<style>.st-key-right_panel{background:var(--panel);border:1px solid var(--border);'
         'border-radius:8px;padding:12px 14px;}</style>',
         unsafe_allow_html=True)
- 
+
 with right_panel:
     st.markdown('<div class="section-title">Statistics</div>', unsafe_allow_html=True)
- 
+
     stats=[
         ("Algorithm",      S.algo),
         ("Victims remaining", len([v for v in S.victims if v not in S.rescued])),
@@ -713,60 +734,37 @@ with right_panel:
         vc=sc_map.get(str(val),"#2C2C2A")
         stat_html+=f'<div class="stat-row"><div class="stat-label">{lbl}</div><div class="stat-value" style="color:{vc}">{val}</div></div>'
     st.markdown(stat_html, unsafe_allow_html=True)
- 
+
     # Victims on grid
     st.markdown('<div class="section-title">Victims on grid</div>', unsafe_allow_html=True)
     vcount=len(S.victims)
     st.markdown(f'<div style="font-size:1rem;font-weight:bold;color:#A32D2D">{vcount} victim(s)</div>'
                 '<div style="font-size:0.75rem;color:#888780">Use controls on left to place/remove</div>',
                 unsafe_allow_html=True)
- 
+
     # ML Prediction
     st.markdown('<div class="section-title">ML Prediction</div>', unsafe_allow_html=True)
     if not _ML_READY:
-        st.markdown('<div style="font-size:0.75rem;color:#888780">Models not found — showing rule-based fallback</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:0.78rem;color:#5A594F;font-style:italic;margin-bottom:4px;">Models not found — showing rule-based fallback</div>', unsafe_allow_html=True)
     else:
-        st.markdown('<div style="font-size:0.75rem;color:#888780">Select a cell → Apply to predict</div>', unsafe_allow_html=True)
- 
+        st.markdown('<div style="font-size:0.78rem;color:#5A594F;font-style:italic;margin-bottom:4px;">Select a cell → Apply to predict</div>', unsafe_allow_html=True)
+
     st.markdown(f'''
     <div class="ml-zone">Zone: {S.ml_zone}</div>
     <div class="ml-risk">Flood Risk: {S.ml_risk}</div>
     <div class="ml-rescue">Rescue Needed: {S.ml_rescue}</div>
     <div class="ml-priority">Priority: {S.ml_priority}</div>
     ''', unsafe_allow_html=True)
- 
+
     # Cell info
     st.markdown('<div class="section-title">Cell Info</div>', unsafe_allow_html=True)
     st.markdown(f'<div style="font-family:Courier,monospace;font-size:0.8rem;'
             f'background:#F8F7F4;border:1px solid #D3D1C7;border-radius:4px;'
             f'padding:10px 12px;min-height:90px;white-space:pre-wrap">{S.cell_info}</div>',
             unsafe_allow_html=True)
- 
- 
-# =====================================================
-# BOTTOM — VICTIM TABLE
-# =====================================================
-st.divider()
-st.markdown('<div style="font-size:1rem;font-weight:bold;color:#2C2C2A;margin-bottom:6px;">Victim Table</div>', unsafe_allow_html=True)
- 
-import pandas as pd
-victim_rows=[]
-for r2,c2 in S.victims:
-    status="✓ Rescued" if (r2,c2) in S.rescued else "⚠ Active"
-    wlv=wl()[r2][c2]
-    zone,risk,resc,pri=ml_predict(r2,c2) if _ML_READY else ("—","—","—","—")
-    victim_rows.append({"Row":r2,"Col":c2,"Status":status,"Water Level":f"{wlv:.2f}",
-                        "Zone":zone,"Flood Risk":risk,"Rescue Needed":resc,"Priority":pri})
- 
-if victim_rows:
-    st.dataframe(pd.DataFrame(victim_rows), width='stretch', hide_index=True)
-else:
-    st.caption("No victims on grid.")
- 
+
 # Footer
 st.markdown(f'<div style="text-align:center;font-size:0.75rem;color:#888780;margin-top:8px;">'
             f'Algorithm: {S.algo} &nbsp;|&nbsp; Steps: {S.total_steps} &nbsp;|&nbsp; '
             f'Rescued: {len(S.rescued)} &nbsp;|&nbsp; Status: {S.sim_status}</div>',
             unsafe_allow_html=True)
- 
- 
