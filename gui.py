@@ -5,6 +5,7 @@
 import sys
 import os
 import heapq
+import pickle
 import random
 import threading
 import time
@@ -159,6 +160,99 @@ def _rcost(r,c):  return get_risk_cost_local(r,c)
 def _hm(pos,gs):  return heuristic_multi_local(pos,gs)
 def _spread():    spread_flood_local()
 
+# ── ML Models ─────────────────────────────────────
+_ML_READY = False
+_dt_model = _nb_model = _scaler_nb = _features = None
+
+try:
+    _models_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Models')
+    with open(os.path.join(_models_path, 'decision_tree.pkl'), 'rb') as f:
+        _dt_model = pickle.load(f)
+    with open(os.path.join(_models_path, 'naive_bayes.pkl'), 'rb') as f:
+        _nb_model = pickle.load(f)
+    with open(os.path.join(_models_path, 'nb_scaler.pkl'), 'rb') as f:
+        _scaler_nb = pickle.load(f)
+    with open(os.path.join(_models_path, 'features.pkl'), 'rb') as f:
+        _features = pickle.load(f)
+    _ML_READY = True
+except Exception:
+    pass
+
+def _ml_predict(r, c):
+    if not _ML_READY:
+        return "—", "—", "—", "—"
+    try:
+        wl   = water_level[r][c]
+        fn   = sum(1 for dr,dc in ((-1,0),(1,0),(0,-1),(0,1))
+                   if 0<=r+dr<ROWS and 0<=c+dc<COLS
+                   and water_level[r+dr][c+dc] > FLOOD_THRESHOLD)
+        sn   = 4 - fn
+        pn   = len(get_neighbors_local((r,c)))
+        conn = round(pn / 4.0, 4)
+        dead = int(conn <= 0.25)
+        ct   = cell_type[r][c]
+
+        flood_cells = [(rr,cc) for rr in range(ROWS) for cc in range(COLS)
+                       if water_level[rr][cc] > FLOOD_THRESHOLD]
+
+        d_flood  = min((abs(r-rr)+abs(c-cc) for rr,cc in flood_cells), default=0)
+        d_origin = min((abs(r-rr)+abs(c-cc) for rr,cc in _FLOOD_ORIGINS), default=0)
+        d_victim = min((abs(r-rr)+abs(c-cc) for rr,cc in dynamic_victims), default=0)
+        d_shelt  = abs(r-shelter_pos[0]) + abs(c-shelter_pos[1])
+
+        row_data = {
+            'water_level'              : round(wl, 4),
+            'water_level_delta'        : 0.0,
+            'time_since_flooded'       : 0,
+            'flood_neighbor_count'     : fn,
+            'safe_neighbor_count'      : sn,
+            'passable_neighbor_count'  : pn,
+            'road_connectivity'        : conn,
+            'is_dead_end'              : dead,
+            'dist_to_nearest_flood'    : d_flood,
+            'dist_to_flood_origin'     : d_origin,
+            'dist_to_nearest_victim'   : d_victim,
+            'dist_to_shelter'          : d_shelt,
+            'nearest_victim_age_group' : 1,
+            'nearest_victim_mobility'  : 0,
+            'nearest_victim_medical'   : 0,
+            'nearest_victim_group_size': 1,
+            'nearest_victim_wait_time' : 0,
+            'is_passable'              : int(is_passable(r,c)),
+        }
+
+        import pandas as pd
+        X = pd.DataFrame([row_data])[_features].values
+
+        zone_names = {0:"Safe", 1:"Risky", 2:"Critical"}
+        zone = zone_names[_dt_model.predict(X)[0]]
+
+        X_sc = _scaler_nb.transform(X)
+        proba = _nb_model.predict_proba(X_sc)[0]
+        flood_risk = f"{(proba[1]+proba[2])*100:.0f}%"
+
+        priority_names = {0:"Low", 1:"Medium", 2:"High", 3:"Critical"}
+        score = 0
+        if ct == VICTIM:      score += 4
+        if wl > FLOOD_THRESHOLD: score += 3
+        elif wl > RISKY_THRESHOLD: score += 1
+        score += fn
+        if d_shelt > 15:      score += 1
+        priority = priority_names[3 if score>=10 else 2 if score>=6 else 1 if score>=3 else 0]
+
+        rescue_names = {0: "No", 1: "Yes ⚠"}
+        ct_val = cell_type[r][c]
+        wl_val = water_level[r][c]
+        rescue = 1 if (ct_val == VICTIM or 
+                       (is_passable(r,c) and wl_val > RISKY_THRESHOLD and fn >= 1)) else 0
+        rescue_needed = rescue_names[rescue]
+
+        return zone, flood_risk, rescue_needed, priority
+
+    except Exception:
+        return "—", "—", "—", "—"
+
+    
 # ── Algorithms ────────────────────────────────────
 
 def algo_bfs(start, goals):
@@ -337,6 +431,7 @@ class FloodGUI:
         self.total_steps = 0
         self.total_cost  = 0.0
         self.hover_cell  = None
+        self.selected_cell = None
         self._stats      = {}
         self._algo_btns  = {}
         self._edit_mode  = tk.StringVar(value="victim")
@@ -368,7 +463,7 @@ class FloodGUI:
         body.pack(fill="both", expand=True)
 
         # ── LEFT PANEL with scroll ──────────────────
-        left_outer = tk.Frame(body, bg=COLOR_PANEL, width=270,
+        left_outer = tk.Frame(body, bg=COLOR_PANEL, width=320,
                               highlightthickness=1,
                               highlightbackground=COLOR_BORDER)
         left_outer.pack(side="left", fill="y", padx=(10,0), pady=10)
@@ -394,11 +489,16 @@ class FloodGUI:
         self.canvas.bind("<Button-3>", self._on_right_click)
 
         # right panel
-        right = tk.Frame(body, bg=COLOR_PANEL, width=185,
-                         highlightthickness=1,
-                         highlightbackground=COLOR_BORDER)
-        right.pack(side="right", fill="y", padx=(0,10), pady=10)
-        right.pack_propagate(False)
+        # right panel
+        right_outer = tk.Frame(body, bg=COLOR_PANEL, width=230,
+                               highlightthickness=1,
+                               highlightbackground=COLOR_BORDER)
+        right_outer.pack(side="right", fill="y", padx=(0,10), pady=10)
+        right_outer.pack_propagate(False)
+
+        self._right_scroll = ScrollableFrame(right_outer, bg=COLOR_PANEL)
+        self._right_scroll.pack(fill="both", expand=True)
+        right = self._right_scroll.inner
         self._build_right_panel(right)
 
         # log
@@ -448,6 +548,16 @@ class FloodGUI:
                            selectcolor=COLOR_PANEL).pack(anchor="w", padx=12, pady=1)
         tk.Label(p, text="Right-click → remove victim", bg=COLOR_PANEL,
                  fg=COLOR_TEXT_MUTED, font=("Helvetica",8)).pack(anchor="w", padx=10, pady=(2,0))
+        tk.Radiobutton(p, text="Predict Selected Cell", 
+                       variable=self._edit_mode, value="predict",
+                       bg=COLOR_PANEL, fg=COLOR_TEXT, font=("Helvetica",9),
+                       activebackground=COLOR_PANEL,
+                       selectcolor=COLOR_PANEL).pack(anchor="w", padx=12, pady=1)
+
+        self.selected_cell_lbl = tk.Label(p, text="No cell selected",
+                                           bg=COLOR_PANEL, fg=COLOR_TEXT_MUTED,
+                                           font=("Helvetica",8))
+        self.selected_cell_lbl.pack(anchor="w", padx=10, pady=(0,4))
 
         self._section(p, "Controls")
         tk.Label(p, text="Animation speed", bg=COLOR_PANEL,
@@ -559,6 +669,35 @@ class FloodGUI:
                  bg=COLOR_PANEL, fg=COLOR_TEXT_MUTED,
                  font=("Helvetica",8), justify="left").pack(anchor="w", padx=12, pady=(2,0))
 
+        self._section(parent, "ML Prediction")
+        tk.Label(parent, text="Hover a cell to predict",
+                 bg=COLOR_PANEL, fg=COLOR_TEXT_MUTED,
+                 font=("Helvetica",8)).pack(anchor="w", padx=12, pady=(0,4))
+
+        self.ml_zone_lbl = tk.Label(parent, text="Zone: —",
+                                     bg="#EEF4FF", fg=COLOR_ACCENT,
+                                     font=("Helvetica",10,"bold"),
+                                     anchor="w", padx=8, pady=4)
+        self.ml_zone_lbl.pack(fill="x", padx=8, pady=2)
+
+        self.ml_risk_lbl = tk.Label(parent, text="Flood Risk: —",
+                                     bg="#FFF8EE", fg=COLOR_WARN,
+                                     font=("Helvetica",10,"bold"),
+                                     anchor="w", padx=8, pady=4)
+        self.ml_risk_lbl.pack(fill="x", padx=8, pady=2)
+
+        self.ml_rescue_lbl = tk.Label(parent, text="Rescue Needed: —",
+                                       bg="#FFEEEE", fg=COLOR_DANGER,
+                                       font=("Helvetica",10,"bold"),
+                                       anchor="w", padx=8, pady=4)
+        self.ml_rescue_lbl.pack(fill="x", padx=8, pady=2)
+
+        self.ml_priority_lbl = tk.Label(parent, text="Priority: —",
+                                         bg="#EEFFEE", fg=COLOR_SUCCESS,
+                                         font=("Helvetica",10,"bold"),
+                                         anchor="w", padx=8, pady=4)
+        self.ml_priority_lbl.pack(fill="x", padx=8, pady=2)
+        
         self._section(parent, "Cell info")
         self.cell_info_lbl = tk.Label(parent, text="Hover a cell",
                                       bg="#F8F7F4", fg=COLOR_TEXT_MUTED,
@@ -641,8 +780,14 @@ class FloodGUI:
         pos = self._cell_from_event(e)
         if pos is None: return
         r,c = pos
-        if self._edit_mode.get()=="victim": self._place_victim(r,c)
-        else: self._erase_cell(r,c)
+        self.selected_cell = (r,c)
+        self.selected_cell_lbl.config(text=f"Selected: ({r},{c})", fg=COLOR_ACCENT)
+        if self._edit_mode.get()=="victim":
+            self._place_victim(r,c)
+        elif self._edit_mode.get()=="predict":
+            self._predict_selected()
+        else:
+            self._erase_cell(r,c)
 
     def _on_right_click(self, e):
         if self.running: return
@@ -689,17 +834,47 @@ class FloodGUI:
             names={ROAD:"Road",BUILDING:"Building",FLOOD:"Flood",
                    BLOCKED:"Blocked",VICTIM:"Victim",SHELTER_TYPE:"Shelter"}
             info=(f"({r},{c})\nType: {names.get(ct,ct)}\n"
-                  f"Water: {wl:.2f}\nCost: {1+wl*10:.1f}\n"
-                  f"Risk: {get_risk_cost_local(r,c):.1f}\n"
+                  f"Water: {wl:.2f}\n"
                   f"Pass: {'Yes' if is_passable(r,c) else 'No'}")
             self.cell_info_lbl.config(text=info, fg=COLOR_TEXT)
             self._draw_grid()
         else:
             self.hover_cell=None
 
+    def _predict_selected(self):
+        if self.selected_cell is None:
+            self.selected_cell_lbl.config(
+                text="No cell selected!", fg=COLOR_DANGER)
+            return
+        r, c = self.selected_cell
+        zone, flood_risk, rescue_needed, priority = _ml_predict(r, c)
+
+        wl  = water_level[r][c]
+        ct  = cell_type[r][c]
+        names = {ROAD:"Road", BUILDING:"Building", FLOOD:"Flood",
+                 BLOCKED:"Blocked", VICTIM:"Victim", SHELTER_TYPE:"Shelter"}
+
+        info = (f"({r},{c})\nType: {names.get(ct,ct)}\n"
+                f"Water: {wl:.2f}\n"
+                f"Pass: {'Yes' if is_passable(r,c) else 'No'}")
+        self.cell_info_lbl.config(text=info, fg=COLOR_TEXT)
+
+        self.ml_zone_lbl.config(text=f"Zone: {zone}")
+        self.ml_risk_lbl.config(text=f"Flood Risk: {flood_risk}")
+        self.ml_rescue_lbl.config(text=f"Rescue Needed: {rescue_needed}")
+        self.ml_priority_lbl.config(text=f"Priority: {priority}")
+
+        self.selected_cell_lbl.config(
+            text=f"Predicted: ({r},{c})", fg=COLOR_SUCCESS)
+    
     def _on_leave(self, e):
         self.hover_cell=None
-        self.cell_info_lbl.config(text="Hover a cell", fg=COLOR_TEXT_MUTED)
+        if self.selected_cell is None:
+            self.cell_info_lbl.config(text="Hover a cell", fg=COLOR_TEXT_MUTED)
+            self.ml_zone_lbl.config(text="Zone: —")
+            self.ml_risk_lbl.config(text="Flood Risk: —")
+            self.ml_rescue_lbl.config(text="Rescue Needed: —")
+            self.ml_priority_lbl.config(text="Priority: —")
         self._draw_grid()
 
     def _select_algo(self, name):
