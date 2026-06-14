@@ -43,7 +43,7 @@ body, .stApp { background:var(--bg) !important; color:var(--text); font-family:H
        border-radius:8px;padding:12px 14px;height:100%;}
 .section-title{font-size:0.7rem;font-weight:bold;color:var(--muted);
                letter-spacing:.08em;text-transform:uppercase;
-               border-bottom:1px solid var(--border);padding-bottom:4px;margin:10px 0 6px;}
+               border-bottom:1px solid var(--border);padding-bottom:4px;margin:10px 0 6px; margin-top:14px !important;}
  
 /* algo buttons */
 .algo-btn{display:block;width:100%;text-align:left;padding:7px 12px;
@@ -107,6 +107,25 @@ div[data-testid="stCheckbox"] label span{color:var(--text) !important;}
 /* checkbox color */
 div[data-testid="stCheckbox"] input[type="checkbox"]{
   accent-color: #185FA5 !important;
+}
+/* expander header fix - prevent color change on open */
+div[data-testid="stExpander"] summary{
+  background:var(--panel) !important;
+  color:var(--text) !important;
+  border:1px solid var(--border) !important;
+  border-radius:5px !important;
+}
+div[data-testid="stExpander"] summary:hover{
+  color:var(--accent) !important;
+}
+div[data-testid="stExpander"] summary svg{
+  fill:var(--text) !important;
+}
+div[data-testid="stExpander"] details{
+  border:none !important;
+}
+div[data-testid="stExpander"]{
+  margin-top:2px !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -719,9 +738,9 @@ with right_panel:
     # Cell info
     st.markdown('<div class="section-title">Cell Info</div>', unsafe_allow_html=True)
     st.markdown(f'<div style="font-family:Courier,monospace;font-size:0.8rem;'
-                f'background:#F8F7F4;border:1px solid #D3D1C7;border-radius:4px;'
-                f'padding:8px;white-space:pre-wrap">{S.cell_info}</div>',
-                unsafe_allow_html=True)
+            f'background:#F8F7F4;border:1px solid #D3D1C7;border-radius:4px;'
+            f'padding:10px 12px;min-height:90px;white-space:pre-wrap">{S.cell_info}</div>',
+            unsafe_allow_html=True)
  
  
 # =====================================================
