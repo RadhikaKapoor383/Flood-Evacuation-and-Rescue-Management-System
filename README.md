@@ -35,9 +35,15 @@ The desktop application (`gui.py`) provides a fully interactive simulation envir
 python gui.py
 ```
 
+### Try Online
+
+Experience the live demo here: **[Flood Evacuation & Rescue Management System](https://flood-evacuation-and-rescue-management-system.streamlit.app/)**
+
+No installation required — run the simulation directly in your browser!
+
 ---
 
-## 🤖 Algorithms
+## Algorithms
 
 | Algorithm | Purpose | Key Property |
 |---|---|---|
@@ -45,6 +51,31 @@ python gui.py
 | **A\*** | Optimized pathfinding | Faster than BFS using heuristic |
 | **Risk-Based A\*** | Flood-aware routing | Avoids high-risk flooded cells |
 | **Hill Climbing** | Dynamic re-routing | Adapts in real time as flood spreads |
+
+### Algorithm Visualizations
+
+**Flood Environment Setup**
+![Flood Environment](images/flood_environment.png)
+
+**BFS Pathfinding**
+| Stage 2: Victim Found | Stage 3: Full Rescue |
+|---|---|
+| ![BFS Stage 2](images/stage2_victim_found_BFS.png) | ![BFS Stage 3](images/stage3_full_rescue_BFS.png) |
+
+**A* Pathfinding**
+| Stage 2: Victim Found | Stage 3: Full Rescue |
+|---|---|
+| ![A* Stage 2](images/astar_stage2_victim_found.png) | ![A* Stage 3](images/astar_stage3_full_rescue.png) |
+
+**Risk-Based A* (Flood-Aware)**
+| Stage 2: Victim Found | Stage 3: Full Rescue |
+|---|---|
+| ![Risk A* Stage 2](images/risk_astar_stage2_victim_found.png) | ![Risk A* Stage 3](images/risk_astar_stage3_full_rescue.png) |
+
+**Hill Climbing (Dynamic Re-routing)**
+| Stage 2: Victim Found | Stage 3: Full Rescue |
+|---|---|
+| ![Hill Climb Stage 2](images/hill_climb_stage2_victim_found.png) | ![Hill Climb Stage 3](images/hill_climb_stage3_full_rescue.png) |
 
 ---
 
@@ -72,13 +103,14 @@ python gui.py
 ```
 Flood-Evacuation-and-Rescue-Management-System/
 │
-├── gui.py                          # Main desktop application
+├── gui.py                          # Desktop GUI application (Tkinter)
+├── App.py                          # Web app (Streamlit)
 │
 ├── Environment/
 │   └── grid.py                     # Grid setup, flood spread, helpers
 │
 ├── Dataset/
-│   ├── generate_dataset.py         # Dataset generator from simulation
+│   ├── generate-dataset.py         # Dataset generator from simulation
 │   └── flood_dataset.csv           # Generated dataset (60,000 rows)
 │
 ├── Models/
@@ -91,16 +123,28 @@ Flood-Evacuation-and-Rescue-Management-System/
 │   ├── ann_scaler.pkl              # ANN StandardScaler
 │   └── features.pkl                # Feature list used during training
 │
-├── notebook/
-│   └── flood-evacuation-&-rescue-analysis.ipynb   # ML training notebook
-│
 ├── Algorithms/
 │   ├── bfs.ipynb                   # BFS implementation & visualization
 │   ├── A-star.ipynb                # A* implementation & visualization
 │   ├── RiskBased-A-star.ipynb      # Risk-Based A* notebook
 │   └── Hill-Climbing.ipynb         # Hill Climbing notebook
 │
-└── requirements.txt
+├── notebook/
+│   └── flood-evacuation-&-rescue-analysis.ipynb   # ML training & analysis
+│
+├── images/
+│   ├── flood_environment.png       # Initial flood grid
+│   ├── stage2_victim_found_BFS.png # BFS stage 2 visualization
+│   ├── stage3_full_rescue_BFS.png  # BFS stage 3 visualization
+│   ├── astar_stage2_victim_found.png       # A* stage 2 visualization
+│   ├── astar_stage3_full_rescue.png        # A* stage 3 visualization
+│   ├── risk_astar_stage2_victim_found.png  # Risk-Based A* stage 2
+│   ├── risk_astar_stage3_full_rescue.png   # Risk-Based A* stage 3
+│   ├── hill_climb_stage2_victim_found.png  # Hill Climbing stage 2
+│   └── hill_climb_stage3_full_rescue.png   # Hill Climbing stage 3
+│
+├── requirements.txt                # Python dependencies
+└── README.md                       # This file
 ```
 
 ---
