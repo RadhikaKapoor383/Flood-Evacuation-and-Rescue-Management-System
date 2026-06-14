@@ -87,7 +87,12 @@ div[data-testid="stVerticalBlock"]{gap:0.3rem;}
 div[data-testid="stRadio"] label,
 div[data-testid="stRadio"] label p,
 div[data-testid="stRadio"] label span{color:var(--text) !important;}
- 
+
+/* checkbox label text visibility fix */
+div[data-testid="stCheckbox"] label,
+div[data-testid="stCheckbox"] label p,
+div[data-testid="stCheckbox"] label span{color:var(--text) !important;}
+
 /* generic button styling to match algo-btn look */
 .stButton button{
   border:1px solid var(--border) !important;
@@ -98,6 +103,10 @@ div[data-testid="stRadio"] label span{color:var(--text) !important;}
 .stButton button:hover{
   border-color:var(--accent) !important;
   color:var(--accent) !important;
+}
+/* checkbox color */
+div[data-testid="stCheckbox"] input[type="checkbox"]{
+  accent-color: #185FA5 !important;
 }
 </style>
 """, unsafe_allow_html=True)
