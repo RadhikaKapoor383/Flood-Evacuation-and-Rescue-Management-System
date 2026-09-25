@@ -4,7 +4,7 @@ An AI-powered flood simulation system that combines pathfinding algorithms with 
 
 ---
 
-## Project Overview
+## Project Overview.
 
 This system simulates a dynamic flood environment on a grid and uses multiple AI techniques to:
 
